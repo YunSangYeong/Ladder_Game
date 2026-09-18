@@ -16,8 +16,20 @@
     .card {
       background: white; border-radius: 20px; padding: 25px;
       box-shadow: 0 10px 25px rgba(255, 182, 193, 0.4);
-      text-align: center; max-width: 700px; width: 100%; border: 4px solid #ffb6c1;
+      text-align: center; max-width: 750px; width: 100%; border: 4px solid #ffb6c1;
+      transition: transform 0.1s;
     }
+    
+    /* 꽝 당첨 시 화면 진동 효과 */
+    .shake {
+      animation: shake 0.5s ease-in-out;
+    }
+    @keyframes shake {
+      0%, 100% { transform: translateX(0); }
+      20%, 60% { transform: translateX(-10px) rotate(-1deg); }
+      40%, 80% { transform: translateX(10px) rotate(1deg); }
+    }
+
     h1 { color: #ff6b81; margin-bottom: 5px; font-size: 28px; }
     p { color: #777; font-size: 14px; margin-bottom: 20px; }
     
@@ -38,37 +50,56 @@
       outline: none; font-size: 15px; background: #fff0f5;
     }
     
-    button {
+    button.main-btn {
       background: #ff6b81; color: white; border: none; padding: 12px 24px;
       font-size: 18px; border-radius: 15px; cursor: pointer; transition: 0.2s;
       box-shadow: 0 4px 0 #d63031; margin-bottom: 15px;
     }
-    button:hover { transform: translateY(-2px); background: #ff4757; }
-    button:active { transform: translateY(2px); box-shadow: none; }
+    button.main-btn:hover { transform: translateY(-2px); background: #ff4757; }
+    button.main-btn:active { transform: translateY(2px); box-shadow: none; }
     
-    #canvas-container { position: relative; margin: 0 auto; display: inline-block; overflow-x: auto; max-width: 100%; }
-    canvas { border-radius: 10px; background: #fafafa; }
-    
-    .names-bar, .results-bar { display: flex; justify-content: space-around; width: 100%; margin: 5px 0; }
+    #game-container {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      margin-top: 10px;
+    }
+
+    /* 상단/하단 영역 및 캔버스 비율 동기화 */
+    .names-bar, .results-bar {
+      display: flex;
+      width: 100%;
+      justify-content: space-between;
+      margin: 5px 0;
+    }
+
     .item-btn {
       background: #eccc68; border: 2px solid #ffa502; color: #fff;
-      padding: 6px 8px; border-radius: 10px; cursor: pointer; font-size: 13px;
-      flex: 1; margin: 0 2px; word-break: break-all;
+      padding: 8px 4px; border-radius: 10px; cursor: pointer; font-size: 13px;
+      flex: 1; margin: 0 4px; word-break: break-all; text-align: center;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
     }
     .result-box {
       background: #dfe4ea; border: 2px solid #a4b0be; color: #2f3542;
-      padding: 6px 8px; border-radius: 10px; font-size: 13px;
-      flex: 1; margin: 0 2px; word-break: break-all; text-align: center;
+      padding: 8px 4px; border-radius: 10px; font-size: 13px;
+      flex: 1; margin: 0 4px; word-break: break-all; text-align: center;
+      font-weight: bold;
     }
+    .result-box.boom {
+      background: #ff4757; border-color: #ff6b81; color: white;
+    }
+
+    #canvas-container { width: 100%; }
+    canvas { width: 100%; border-radius: 10px; background: #fafafa; display: block; }
   </style>
 </head>
 <body>
 
-<div class="card">
+<div class="card" id="mainCard">
   <h1>🐣 사다리 타기 🎲</h1>
   <p>인원수(2~10명)를 설정하면 1명만 꽝으로 자동 생성됩니다!</p>
 
-  <!-- 인원수 설정 -->
   <div class="setting-group">
     <label for="memberCount"><b>참가 인원 (2~10명):</b></label>
     <input type="number" id="memberCount" min="2" max="10" value="5" onchange="updateInputs()">
@@ -81,18 +112,20 @@
     </div>
     <div class="input-row">
       <span>결과:</span>
-      <input type="text" id="results" value="통과, 통과, 통과, 통과, 꽝">
+      <input type="text" id="results" value="통과, 통과, 통과, 통과, 💣 꽝!">
     </div>
   </div>
   
-  <button onclick="generateLadder()">사다리 생성하기 ✨</button>
+  <button class="main-btn" onclick="generateLadder()">사다리 생성하기 ✨</button>
 
   <div id="game-area" style="display:none;">
-    <div class="names-bar" id="names-bar"></div>
-    <div id="canvas-container">
-      <canvas id="ladderCanvas" height="320"></canvas>
+    <div id="game-container">
+      <div class="names-bar" id="names-bar"></div>
+      <div id="canvas-container">
+        <canvas id="ladderCanvas" height="320"></canvas>
+      </div>
+      <div class="results-bar" id="results-bar"></div>
     </div>
-    <div class="results-bar" id="results-bar"></div>
   </div>
 </div>
 
@@ -103,9 +136,9 @@
   let numCols = 0;
   let horizontalLines = [];
   let isAnimating = false;
+  let colCenters = []; // 각 세로선 위치 중앙값 저장
   const icons = ['🐰', '🐻', '🐥', '🐶', '🐱', '🦊', '🐼', '🐨', '🐯', '🦁'];
 
-  // 인원 수 변경 시 이름/결과 기본값 자동 설정 기능
   function updateInputs() {
     let count = parseInt(document.getElementById('memberCount').value);
     if (isNaN(count) || count < 2) count = 2;
@@ -115,7 +148,6 @@
     let defaultNames = ['토끼', '곰돌이', '병아리', '강아지', '고양이', '사막여우', '판다', '코알라', '호랑이', '사자'];
     let selectedNames = defaultNames.slice(0, count);
 
-    // 1명만 '꽝', 나머지는 '통과' 생성
     let selectedResults = Array(count - 1).fill('통과');
     selectedResults.push('💣 꽝!');
 
@@ -139,22 +171,33 @@
     }
 
     numCols = names.length;
-    // 인원수에 맞춰 캔버스 너비 동적 변경
-    canvas.width = Math.max(320, numCols * 70);
     document.getElementById('game-area').style.display = 'block';
+
+    renderUI();
+    
+    // UI 버튼 위치에 맞춰 캔버스 해상도 및 세로선 좌표 정밀 계산
+    const containerWidth = document.getElementById('names-bar').clientWidth;
+    canvas.width = containerWidth;
+
+    colCenters = [];
+    const itemButtons = document.querySelectorAll('.item-btn');
+    itemButtons.forEach((btn) => {
+      let rect = btn.getBoundingClientRect();
+      let parentRect = btn.parentElement.getBoundingClientRect();
+      let centerX = (rect.left - parentRect.left) + rect.width / 2;
+      colCenters.push(centerX);
+    });
 
     // 가로선 생성
     horizontalLines = [];
-    const colWidth = canvas.width / numCols;
     for (let i = 0; i < numCols - 1; i++) {
-      let count = Math.floor(Math.random() * 3) + 3; // 사다리 가로줄 개수
+      let count = Math.floor(Math.random() * 3) + 3;
       for (let c = 0; c < count; c++) {
         let y = Math.floor(Math.random() * (canvas.height - 80)) + 40;
         horizontalLines.push({ col: i, y: y });
       }
     }
 
-    renderUI();
     drawLadder();
   }
 
@@ -175,6 +218,7 @@
     results.forEach((res) => {
       let div = document.createElement('div');
       div.className = 'result-box';
+      if (res.includes('꽝')) div.classList.add('boom');
       div.innerText = res;
       resultsBar.appendChild(div);
     });
@@ -186,22 +230,20 @@
     ctx.strokeStyle = '#ffb6c1';
     ctx.lineCap = 'round';
 
-    const colWidth = canvas.width / numCols;
-
-    // 세로선
+    // 세로선 (버튼 중앙에 정렬)
     for (let i = 0; i < numCols; i++) {
-      let x = colWidth * i + colWidth / 2;
+      let x = colCenters[i];
       ctx.beginPath();
-      ctx.moveTo(x, 15);
-      ctx.lineTo(x, canvas.height - 15);
+      ctx.moveTo(x, 10);
+      ctx.lineTo(x, canvas.height - 10);
       ctx.stroke();
     }
 
     // 가로선
     ctx.strokeStyle = '#ffccd5';
     horizontalLines.forEach(line => {
-      let x1 = colWidth * line.col + colWidth / 2;
-      let x2 = colWidth * (line.col + 1) + colWidth / 2;
+      let x1 = colCenters[line.col];
+      let x2 = colCenters[line.col + 1];
       ctx.beginPath();
       ctx.moveTo(x1, line.y);
       ctx.lineTo(x2, line.y);
@@ -215,17 +257,17 @@
 
     drawLadder();
 
-    const colWidth = canvas.width / numCols;
     let currCol = startCol;
-    let currX = colWidth * currCol + colWidth / 2;
-    let currY = 15;
+    let currX = colCenters[currCol];
+    let currY = 10;
 
     ctx.lineWidth = 6;
     ctx.strokeStyle = '#ff4757';
 
     function animate() {
-      if (currY >= canvas.height - 15) {
+      if (currY >= canvas.height - 10) {
         isAnimating = false;
+        checkResult(currCol);
         return;
       }
 
@@ -236,11 +278,11 @@
       let hLineLeft = horizontalLines.find(l => l.col === currCol - 1 && Math.abs(l.y - currY) < 2);
 
       if (hLineRight) {
-        let targetX = colWidth * (currCol + 1) + colWidth / 2;
+        let targetX = colCenters[currCol + 1];
         currX = targetX;
         currCol++;
       } else if (hLineLeft) {
-        let targetX = colWidth * (currCol - 1) + colWidth / 2;
+        let targetX = colCenters[currCol - 1];
         currX = targetX;
         currCol--;
       }
@@ -253,6 +295,69 @@
     }
 
     animate();
+  }
+
+  // 결과 처리 및 애니메이션
+  function checkResult(finalCol) {
+    let finalResult = results[finalCol];
+
+    if (finalResult.includes('꽝')) {
+      // 1. 화면 흔들림 효과
+      let card = document.getElementById('mainCard');
+      card.classList.add('shake');
+      setTimeout(() => card.classList.remove('shake'), 500);
+
+      // 2. 꽝 파티클 폭발 효과
+      triggerBoomEffect(colCenters[finalCol], canvas.height - 10);
+    }
+  }
+
+  // 꽝 파티클 이펙트
+  function triggerBoomEffect(startX, startY) {
+    let particles = [];
+    for (let i = 0; i < 30; i++) {
+      particles.push({
+        x: startX,
+        y: startY,
+        vx: (Math.random() - 0.5) * 12,
+        vy: (Math.random() - 0.5) * 12,
+        size: Math.random() * 8 + 4,
+        color: ['#ff4757', '#ffa502', '#ff6b81', '#2ed573'][Math.floor(Math.random() * 4)],
+        alpha: 1
+      });
+    }
+
+    function renderParticles() {
+      let alive = false;
+      particles.forEach(p => {
+        if (p.alpha > 0) {
+          alive = true;
+          ctx.save();
+          ctx.globalAlpha = p.alpha;
+          ctx.fillStyle = p.color;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+
+          p.x += p.vx;
+          p.y += p.vy;
+          p.alpha -= 0.02;
+        }
+      });
+
+      if (alive) {
+        requestAnimationFrame(renderParticles);
+      } else {
+        // 텍스트 강조 팝업 표시
+        ctx.fillStyle = '#ff4757';
+        ctx.font = 'bold 26px Jua';
+        ctx.textAlign = 'center';
+        ctx.fillText('💥 꽝 당첨! 💥', canvas.width / 2, canvas.height / 2);
+      }
+    }
+
+    renderParticles();
   }
 </script>
 
