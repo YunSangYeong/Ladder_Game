@@ -16,15 +16,28 @@
     .card {
       background: white; border-radius: 20px; padding: 25px;
       box-shadow: 0 10px 25px rgba(255, 182, 193, 0.4);
-      text-align: center; max-width: 500px; width: 100%; border: 4px solid #ffb6c1;
+      text-align: center; max-width: 700px; width: 100%; border: 4px solid #ffb6c1;
     }
     h1 { color: #ff6b81; margin-bottom: 5px; font-size: 28px; }
     p { color: #777; font-size: 14px; margin-bottom: 20px; }
-    .inputs { display: flex; gap: 10px; margin-bottom: 15px; justify-content: center; }
-    input {
-      width: 45%; padding: 10px; border: 2px solid #ffccd5; border-radius: 12px;
-      text-align: center; outline: none; font-size: 15px; background: #fff0f5;
+    
+    .setting-group {
+      display: flex; justify-content: center; align-items: center; gap: 10px; margin-bottom: 15px;
     }
+    .setting-group label { font-size: 16px; color: #555; }
+    .setting-group input[type="number"] {
+      width: 70px; padding: 6px; border: 2px solid #ffccd5; border-radius: 10px;
+      text-align: center; font-size: 16px; outline: none; background: #fff0f5;
+    }
+
+    .inputs { display: flex; flex-direction: column; gap: 10px; margin-bottom: 15px; align-items: center; }
+    .input-row { width: 100%; display: flex; justify-content: center; align-items: center; gap: 10px; }
+    .input-row span { font-size: 15px; color: #ff6b81; width: 70px; text-align: right; }
+    .input-row input {
+      width: 70%; padding: 10px; border: 2px solid #ffccd5; border-radius: 12px;
+      outline: none; font-size: 15px; background: #fff0f5;
+    }
+    
     button {
       background: #ff6b81; color: white; border: none; padding: 12px 24px;
       font-size: 18px; border-radius: 15px; cursor: pointer; transition: 0.2s;
@@ -32,18 +45,20 @@
     }
     button:hover { transform: translateY(-2px); background: #ff4757; }
     button:active { transform: translateY(2px); box-shadow: none; }
-    #canvas-container { position: relative; margin: 0 auto; display: inline-block; }
+    
+    #canvas-container { position: relative; margin: 0 auto; display: inline-block; overflow-x: auto; max-width: 100%; }
     canvas { border-radius: 10px; background: #fafafa; }
+    
     .names-bar, .results-bar { display: flex; justify-content: space-around; width: 100%; margin: 5px 0; }
     .item-btn {
       background: #eccc68; border: 2px solid #ffa502; color: #fff;
-      padding: 6px 12px; border-radius: 10px; cursor: pointer; font-size: 14px;
-      min-width: 60px; word-break: break-all;
+      padding: 6px 8px; border-radius: 10px; cursor: pointer; font-size: 13px;
+      flex: 1; margin: 0 2px; word-break: break-all;
     }
     .result-box {
       background: #dfe4ea; border: 2px solid #a4b0be; color: #2f3542;
-      padding: 6px 12px; border-radius: 10px; font-size: 14px;
-      min-width: 60px; word-break: break-all;
+      padding: 6px 8px; border-radius: 10px; font-size: 13px;
+      flex: 1; margin: 0 2px; word-break: break-all; text-align: center;
     }
   </style>
 </head>
@@ -51,18 +66,31 @@
 
 <div class="card">
   <h1>🐣 사다리 타기 🎲</h1>
-  <p>참가자와 결과 항목을 쉼표(,)로 구분해 입력하세요!</p>
+  <p>인원수(2~10명)를 설정하면 1명만 꽝으로 자동 생성됩니다!</p>
+
+  <!-- 인원수 설정 -->
+  <div class="setting-group">
+    <label for="memberCount"><b>참가 인원 (2~10명):</b></label>
+    <input type="number" id="memberCount" min="2" max="10" value="5" onchange="updateInputs()">
+  </div>
   
   <div class="inputs">
-    <input type="text" id="names" value="토끼, 곰돌이, 병아리, 강아지">
-    <input type="text" id="results" value="당첨, 꽝, 당첨, 꽝">
+    <div class="input-row">
+      <span>참가자:</span>
+      <input type="text" id="names" value="토끼, 곰돌이, 병아리, 강아지, 고양이">
+    </div>
+    <div class="input-row">
+      <span>결과:</span>
+      <input type="text" id="results" value="통과, 통과, 통과, 통과, 꽝">
+    </div>
   </div>
+  
   <button onclick="generateLadder()">사다리 생성하기 ✨</button>
 
   <div id="game-area" style="display:none;">
     <div class="names-bar" id="names-bar"></div>
     <div id="canvas-container">
-      <canvas id="ladderCanvas" width="400" height="300"></canvas>
+      <canvas id="ladderCanvas" height="320"></canvas>
     </div>
     <div class="results-bar" id="results-bar"></div>
   </div>
@@ -75,29 +103,53 @@
   let numCols = 0;
   let horizontalLines = [];
   let isAnimating = false;
-  const icons = ['🐰', '🐻', '🐥', '🐶', '🐱', '🦊', '🐼', '🐨'];
+  const icons = ['🐰', '🐻', '🐥', '🐶', '🐱', '🦊', '🐼', '🐨', '🐯', '🦁'];
+
+  // 인원 수 변경 시 이름/결과 기본값 자동 설정 기능
+  function updateInputs() {
+    let count = parseInt(document.getElementById('memberCount').value);
+    if (isNaN(count) || count < 2) count = 2;
+    if (count > 10) count = 10;
+    document.getElementById('memberCount').value = count;
+
+    let defaultNames = ['토끼', '곰돌이', '병아리', '강아지', '고양이', '사막여우', '판다', '코알라', '호랑이', '사자'];
+    let selectedNames = defaultNames.slice(0, count);
+
+    // 1명만 '꽝', 나머지는 '통과' 생성
+    let selectedResults = Array(count - 1).fill('통과');
+    selectedResults.push('💣 꽝!');
+
+    document.getElementById('names').value = selectedNames.join(', ');
+    document.getElementById('results').value = selectedResults.join(', ');
+  }
 
   function generateLadder() {
     if (isAnimating) return;
     names = document.getElementById('names').value.split(',').map(s => s.trim()).filter(s => s);
     results = document.getElementById('results').value.split(',').map(s => s.trim()).filter(s => s);
 
-    if (names.length < 2 || names.length !== results.length) {
-      alert('참가자와 결과의 개수를 동일하게 2개 이상 입력해주세요!');
+    if (names.length < 2 || names.length > 10) {
+      alert('참가자는 2명 이상, 최대 10명까지 입력할 수 있습니다.');
+      return;
+    }
+
+    if (names.length !== results.length) {
+      alert(`참가자 수(${names.length}명)와 결과 수(${results.length}개)의 개수가 일치해야 합니다!`);
       return;
     }
 
     numCols = names.length;
-    canvas.width = Math.max(300, numCols * 80);
+    // 인원수에 맞춰 캔버스 너비 동적 변경
+    canvas.width = Math.max(320, numCols * 70);
     document.getElementById('game-area').style.display = 'block';
 
     // 가로선 생성
     horizontalLines = [];
     const colWidth = canvas.width / numCols;
     for (let i = 0; i < numCols - 1; i++) {
-      let count = Math.floor(Math.random() * 3) + 2;
+      let count = Math.floor(Math.random() * 3) + 3; // 사다리 가로줄 개수
       for (let c = 0; c < count; c++) {
-        let y = Math.floor(Math.random() * (canvas.height - 60)) + 30;
+        let y = Math.floor(Math.random() * (canvas.height - 80)) + 40;
         horizontalLines.push({ col: i, y: y });
       }
     }
@@ -140,8 +192,8 @@
     for (let i = 0; i < numCols; i++) {
       let x = colWidth * i + colWidth / 2;
       ctx.beginPath();
-      ctx.moveTo(x, 10);
-      ctx.lineTo(x, canvas.height - 10);
+      ctx.moveTo(x, 15);
+      ctx.lineTo(x, canvas.height - 15);
       ctx.stroke();
     }
 
@@ -166,13 +218,13 @@
     const colWidth = canvas.width / numCols;
     let currCol = startCol;
     let currX = colWidth * currCol + colWidth / 2;
-    let currY = 10;
+    let currY = 15;
 
     ctx.lineWidth = 6;
     ctx.strokeStyle = '#ff4757';
 
     function animate() {
-      if (currY >= canvas.height - 10) {
+      if (currY >= canvas.height - 15) {
         isAnimating = false;
         return;
       }
@@ -180,7 +232,6 @@
       ctx.beginPath();
       ctx.moveTo(currX, currY);
 
-      // 옆으로 연결된 가로선 확인
       let hLineRight = horizontalLines.find(l => l.col === currCol && Math.abs(l.y - currY) < 2);
       let hLineLeft = horizontalLines.find(l => l.col === currCol - 1 && Math.abs(l.y - currY) < 2);
 
